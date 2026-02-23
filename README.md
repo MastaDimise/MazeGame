@@ -13,6 +13,7 @@
 ## Запуск
 
 Откройте файл `index.html` в браузере (Chrome, Firefox, Safari и т.д.). Никакой установки и сервера не требуется.
+Либо перейди по ссылке https://mastadimise.github.io/MazeGame/
 
 ## Технологии
 
