@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Кристаллы лабиринта</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      min-height: 100vh;
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Press Start 2P', cursive;
+      color: #eee;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 14px;
+      margin-bottom: 16px;
+      color: #e94560;
+      text-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
+    }
+    .game-container {
+      background: #16213e;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 
+        0 0 0 4px #0f3460,
+        0 0 30px rgba(233, 69, 96, 0.2),
+        inset 0 0 60px rgba(0,0,0,0.3);
+    }
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border: 4px solid #0f3460;
+      background: #0f3460;
+    }
+    .ui {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 16px;
+      font-size: 10px;
+      gap: 24px;
+    }
+    .crystals-count {
+      color: #ffd700;
+    }
+    .controls {
+      color: #888;
+      font-size: 8px;
+    }
+    .win-message {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(26, 26, 46, 0.95);
+      padding: 40px;
+      border: 4px solid #e94560;
+      border-radius: 8px;
+      text-align: center;
+      z-index: 100;
+      display: none;
+      animation: pulse 0.5s ease;
+    }
+    .win-message.show {
+      display: block;
+    }
+    .win-message h2 {
+      font-size: 14px;
+      color: #ffd700;
+      margin-bottom: 20px;
+    }
+    .win-message button {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 10px;
+      padding: 12px 24px;
+      background: #e94560;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .win-message button:hover {
+      background: #ff6b6b;
+    }
+    @keyframes pulse {
+      from { transform: translate(-50%, -50%) scale(0.9); opacity: 0; }
+      to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <h1>◆ КРИСТАЛЛЫ ЛАБИРИНТА ◆</h1>
+  <div class="game-container">
+    <canvas id="game" width="320" height="320"></canvas>
+    <div class="ui">
+      <span class="crystals-count">Кристаллы: <span id="score">0</span> / <span id="total">0</span></span>
+      <span class="controls">← → ↑ ↓ двигаться</span>
+    </div>
+  </div>
+  <div class="win-message" id="winMessage">
+    <h2>★ ПОБЕДА! ★</h2>
+    <p>Все кристаллы собраны!</p>
+    <button id="restartBtn">Играть снова</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const TILE = 16;
+    const COLS = Math.floor(320 / TILE);
+    const ROWS = Math.floor(320 / TILE);
+
+    // 0 = путь, 1 = стена
+    let maze = [];
+    const player = { x: 1, y: 1 };
+    let crystals = [];
+    let totalCrystals = 0;
+    let collected = 0;
+
+    // Генерация лабиринта (рекурсивное разбиение)
+    function generateMaze() {
+      for (let y = 0; y < ROWS; y++) {
+        maze[y] = [];
+        for (let x = 0; x < COLS; x++) {
+          if (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1)
+            maze[y][x] = 1;
+          else
+            maze[y][x] = 1;
+        }
+      }
+      function carve(x, y) {
+        maze[y][x] = 0;
+        const dirs = [[0, -2], [0, 2], [-2, 0], [2, 0]].sort(() => Math.random() - 0.5);
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx > 0 && nx < COLS - 1 && ny > 0 && ny < ROWS - 1 && maze[ny][nx] === 1) {
+            maze[y + dy / 2][x + dx / 2] = 0;
+            carve(nx, ny);
+          }
+        }
+      }
+      carve(1, 1);
+      maze[1][1] = 0;
+      maze[ROWS - 2][COLS - 2] = 0;
+    }
+
+    function placeCrystals() {
+      const free = [];
+      for (let y = 1; y < ROWS - 1; y++) {
+        for (let x = 1; x < COLS - 1; x++) {
+          if (maze[y][x] === 0 && !(x === 1 && y === 1))
+            free.push({ x, y });
+        }
+      }
+      crystals = [];
+      const want = Math.min(8, Math.max(4, Math.floor(free.length * 0.15)));
+      for (let i = 0; i < want && free.length > 0; i++) {
+        const idx = Math.floor(Math.random() * free.length);
+        crystals.push(free[idx]);
+        free.splice(idx, 1);
+      }
+      totalCrystals = crystals.length;
+    }
+
+    function drawPixelBlock(x, y, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+    }
+
+    function drawWall(x, y) {
+      const px = x * TILE;
+      const py = y * TILE;
+      ctx.fillStyle = '#2d4059';
+      ctx.fillRect(px, py, TILE, TILE);
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+      ctx.fillStyle = '#3d5a80';
+      ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+    }
+
+    function drawCrystal(x, y) {
+      const px = x * TILE + TILE / 2;
+      const py = y * TILE + TILE / 2;
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath();
+      ctx.moveTo(px, py - 5);
+      ctx.lineTo(px + 4, py + 3);
+      ctx.lineTo(px - 2, py + 2);
+      ctx.lineTo(px + 2, py + 2);
+      ctx.lineTo(px - 4, py + 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#ffaa00';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillRect(px - 1, py - 3, 2, 2);
+    }
+
+    function drawPlayer() {
+      const px = player.x * TILE;
+      const py = player.y * TILE;
+      // Тело (пиксель-персонаж)
+      ctx.fillStyle = '#4ecdc4';
+      ctx.fillRect(px + 4, py + 2, 8, 10);
+      ctx.fillStyle = '#2a9d8f';
+      ctx.fillRect(px + 6, py + 4, 4, 6);
+      // Голова
+      ctx.fillStyle = '#ffb4a2';
+      ctx.fillRect(px + 5, py + 0, 6, 5);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(px + 6, py + 2, 1, 1);
+      ctx.fillRect(px + 9, py + 2, 1, 1);
+      // Ноги
+      ctx.fillStyle = '#2d4059';
+      ctx.fillRect(px + 4, py + 12, 3, 2);
+      ctx.fillRect(px + 9, py + 12, 3, 2);
+    }
+
+    function draw() {
+      ctx.fillStyle = '#0f3460';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (maze[y][x] === 1) {
+            drawWall(x, y);
+          } else {
+            drawPixelBlock(x, y, '#16213e');
+          }
+        }
+      }
+
+      crystals.forEach(c => drawCrystal(c.x, c.y));
+      drawPlayer();
+    }
+
+    function canMove(nx, ny) {
+      if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return false;
+      return maze[ny][nx] === 0;
+    }
+
+    function collectCrystal() {
+      crystals = crystals.filter(c => !(c.x === player.x && c.y === player.y));
+      collected = totalCrystals - crystals.length;
+      document.getElementById('score').textContent = collected;
+      document.getElementById('total').textContent = totalCrystals;
+      if (crystals.length === 0) {
+        document.getElementById('winMessage').classList.add('show');
+      }
+    }
+
+    function move(dx, dy) {
+      const nx = player.x + dx;
+      const ny = player.y + dy;
+      if (canMove(nx, ny)) {
+        player.x = nx;
+        player.y = ny;
+        collectCrystal();
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (document.getElementById('winMessage').classList.contains('show')) return;
+      switch (e.key) {
+        case 'ArrowUp': e.preventDefault(); move(0, -1); break;
+        case 'ArrowDown': e.preventDefault(); move(0, 1); break;
+        case 'ArrowLeft': e.preventDefault(); move(-1, 0); break;
+        case 'ArrowRight': e.preventDefault(); move(1, 0); break;
+      }
+      draw();
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      document.getElementById('winMessage').classList.remove('show');
+      generateMaze();
+      placeCrystals();
+      player.x = 1;
+      player.y = 1;
+      collected = 0;
+      document.getElementById('score').textContent = 0;
+      document.getElementById('total').textContent = totalCrystals;
+      draw();
+    });
+
+    generateMaze();
+    placeCrystals();
+    document.getElementById('total').textContent = totalCrystals;
+    draw();
+  </script>
+</body>
+</html>
